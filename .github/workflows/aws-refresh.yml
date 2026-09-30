@@ -60,6 +60,15 @@ jobs:
                    vini_card.json vini_report_tracking.json studio_card.json rooftop_adoption.json; do
             [ -f "$f" ] && cp "$f" "/tmp/org/$f" && cp "$f" "/tmp/org/vercel_deploy/$f" || true
           done
+          # TV wall PNGs (when tv-snapshot.yml has run). Copied to both likely static
+          # paths — confirm the one your aws-prod Express server reads.
+          if [ -f snapshots/vini-snapshot.png ]; then
+            mkdir -p /tmp/org/snapshots /tmp/org/public/snapshots
+            cp snapshots/vini-snapshot.png /tmp/org/snapshots/
+            cp snapshots/studio-snapshot.png /tmp/org/snapshots/
+            cp snapshots/vini-snapshot.png /tmp/org/public/snapshots/
+            cp snapshots/studio-snapshot.png /tmp/org/public/snapshots/
+          fi
           cd /tmp/org
           # Guard: never ship a bloated page (the StripKey regression produced a
           # 99MB file that GitHub rejected). 20MB is far above the ~6MB norm.

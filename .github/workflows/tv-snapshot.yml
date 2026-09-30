@@ -1,0 +1,98 @@
+name: TV wall snapshot (every 5 min)
+
+# Captures snapshots/vini-snapshot.png + studio-snapshot.png for the production
+# TV slide and (when ORG_SYNC_TOKEN is set) pushes them to spyne-ai-agentic-dev
+# csm-dashboard aws-prod so csm-dashboard.spyne.ai/api/v1/*-snapshot.png updates.
+#
+# Production today: static PNG baked into the AWS image, refreshed ~daily (07:00 IST
+# report). This workflow is the fork-side fix for near-real-time TV refresh.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: tv-snapshot
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    env:
+      ORG_SYNC_TOKEN: ${{ secrets.ORG_SYNC_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies + Chromium
+        working-directory: email
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Capture TV wall PNGs
+        working-directory: email
+        run: node capture-wall-snapshots.mjs
+
+      - name: Commit snapshot PNGs if changed
+        id: commit
+        run: |
+          git status --short snapshots/
+          if [[ -z "$(git status --porcelain snapshots/)" ]]; then
+            echo "Snapshots unchanged — skipping commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add snapshots/
+          ts=$(date -u +'%Y-%m-%d %H:%M UTC')
+          git commit -m "TV wall snapshots ($ts) [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push; then echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            git pull --rebase origin "${{ github.ref_name }}"
+          done
+          exit 1
+
+      - name: Push snapshots to org aws-prod (optional)
+        if: steps.commit.outputs.changed == 'true' && env.ORG_SYNC_TOKEN != ''
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/spyne-ai-agentic-dev/csm-dashboard.git" /tmp/org
+          # Paths the Express API is expected to read — verify in org ONBOARDING.md /
+          # server static config on aws-prod if deploy doesn't pick up PNGs.
+          for dst in snapshots public/snapshots; do
+            mkdir -p "/tmp/org/$dst"
+            cp snapshots/vini-snapshot.png "/tmp/org/$dst/vini-snapshot.png"
+            cp snapshots/studio-snapshot.png "/tmp/org/$dst/studio-snapshot.png"
+          done
+          cd /tmp/org
+          if git diff --quiet; then
+            echo "Org repo snapshots already match — nothing to push."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add snapshots/ public/snapshots/ 2>/dev/null || git add -A
+          git commit -q -m "TV wall snapshots from upstream fork [skip ci]"
+          git push origin HEAD:main
+          MAIN=$(git rev-parse HEAD)
+          PROD=$(git ls-remote origin refs/heads/aws-prod | cut -f1)
+          if [ "$MAIN" != "$PROD" ]; then
+            git push origin "$MAIN":refs/heads/aws-prod
+            echo "aws-prod advanced -> ${MAIN} (CodePipeline rebuild)"
+          fi
+
+      - name: Warn if org token missing
+        if: env.ORG_SYNC_TOKEN == ''
+        run: |
+          echo "::warning::ORG_SYNC_TOKEN not set — PNGs commit to this fork only. Add a token with contents:write on spyne-ai-agentic-dev/csm-dashboard to update csm-dashboard.spyne.ai."

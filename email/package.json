@@ -8,7 +8,8 @@
     "generate": "node generate-digest.mjs",
     "send": "node send-digest.mjs",
     "shoot": "node shoot-and-send.mjs",
-    "slack": "node shoot-and-slack.mjs"
+    "slack": "node shoot-and-slack.mjs",
+    "capture-wall": "node capture-wall-snapshots.mjs"
   },
   "dependencies": {
     "nodemailer": "^6.9.14",
