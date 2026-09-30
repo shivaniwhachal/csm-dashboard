@@ -1,15 +1,11 @@
 #!/usr/bin/env node
 // Capture 3840×2160 TV wall PNGs for csm-dashboard.spyne.ai/api/v1/*-snapshot.png.
-// The AWS container serves these as static files (no headless browser at runtime).
-// This script mirrors the production wall layout: product Overview with Segment,
-// Agent, and CSM-level views visible (a.k.a. "full CSM Views" on the TV).
+// Targets the Views → Vini / Views → Studio presentation layout (tvband KPI wall),
+// NOT the product-tab Overview with segment/CSM tables.
 //
 // Output (repo root):
 //   snapshots/vini-snapshot.png
 //   snapshots/studio-snapshot.png
-//
-// Env: none required. Uses Playwright + a local static server (same pattern as
-// supabase-snapshot.mjs / shoot-and-slack.mjs).
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -27,6 +23,12 @@ const TYPES = {
   '.svg': 'image/svg+xml',
 };
 const VIEWPORT = { width: 3840, height: 2160 };
+
+// Views → Vini / Views → Studio — matches live csm-dashboard.spyne.ai wall layout.
+const WALL_VIEWS = [
+  { view: 'vvini', product: 'vini', filename: 'vini-snapshot.png', mount: '#v-vvini' },
+  { view: 'vstudio', product: 'studio', filename: 'studio-snapshot.png', mount: '#v-vstudio' },
+];
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
@@ -51,7 +53,6 @@ try {
     () => typeof getStudio === 'function' && typeof getVini === 'function',
     { timeout: 30000 },
   );
-  // Match supabase-snapshot: wait for async feeds so KPIs/tables aren't zeros.
   await page.evaluate(() => {
     try {
       if (typeof loadChurn === 'function' && typeof _churnState !== 'undefined' && _churnState === 'idle') {
@@ -73,26 +74,30 @@ try {
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  for (const [product, filename] of [
-    ['vini', 'vini-snapshot.png'],
-    ['studio', 'studio-snapshot.png'],
-  ]) {
-    await page.click(`.top-tab[data-product="${product}"]`);
-    await page.waitForTimeout(500);
-    await page.click('.sub-tab[data-view="overview"]');
-    await page.waitForSelector('#block-csm-view', { timeout: 30000 });
-    await page.waitForSelector('#csm-table-wrap table', { timeout: 30000 }).catch(() => {});
+  for (const { view, product, filename, mount } of WALL_VIEWS) {
+    await page.click('.top-tab[data-view="viewgroup"]');
+    await page.waitForTimeout(400);
+    await page.click(`.view-subtab[data-view="${view}"]`);
+    await page.waitForSelector(mount, { state: 'visible', timeout: 30000 });
+    await page.waitForFunction(
+      (sel) => {
+        const el = document.querySelector(sel);
+        return el && el.textContent && el.textContent.includes('CARR');
+      },
+      mount,
+      { timeout: 30000 },
+    );
     await page.waitForTimeout(1500);
-    const png = await page.screenshot({ type: 'png', fullPage: true });
+    const png = await page.screenshot({ type: 'png' });
     const out = path.join(OUT_DIR, filename);
     fs.writeFileSync(out, png);
     const metaName = filename.replace(/\.png$/, '.json');
     const generated = new Date().toISOString();
     fs.writeFileSync(
       path.join(OUT_DIR, metaName),
-      JSON.stringify({ product, generated, bytes: png.length, width: VIEWPORT.width, height: VIEWPORT.height }, null, 2) + '\n',
+      JSON.stringify({ product, view, generated, bytes: png.length, width: VIEWPORT.width, height: VIEWPORT.height }, null, 2) + '\n',
     );
-    console.log(`Wrote ${out} (${png.length} bytes, ${VIEWPORT.width}×${VIEWPORT.height})`);
+    console.log(`Wrote ${out} (${png.length} bytes, ${VIEWPORT.width}×${VIEWPORT.height}, view=${view})`);
   }
 } finally {
   await browser.close();
