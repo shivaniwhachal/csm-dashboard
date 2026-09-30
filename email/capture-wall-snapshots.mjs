@@ -86,6 +86,12 @@ try {
     const png = await page.screenshot({ type: 'png', fullPage: true });
     const out = path.join(OUT_DIR, filename);
     fs.writeFileSync(out, png);
+    const metaName = filename.replace(/\.png$/, '.json');
+    const generated = new Date().toISOString();
+    fs.writeFileSync(
+      path.join(OUT_DIR, metaName),
+      JSON.stringify({ product, generated, bytes: png.length, width: VIEWPORT.width, height: VIEWPORT.height }, null, 2) + '\n',
+    );
     console.log(`Wrote ${out} (${png.length} bytes, ${VIEWPORT.width}×${VIEWPORT.height})`);
   }
 } finally {

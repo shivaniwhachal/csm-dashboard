@@ -64,10 +64,11 @@ jobs:
           # paths — confirm the one your aws-prod Express server reads.
           if [ -f snapshots/vini-snapshot.png ]; then
             mkdir -p /tmp/org/snapshots /tmp/org/public/snapshots
-            cp snapshots/vini-snapshot.png /tmp/org/snapshots/
-            cp snapshots/studio-snapshot.png /tmp/org/snapshots/
-            cp snapshots/vini-snapshot.png /tmp/org/public/snapshots/
-            cp snapshots/studio-snapshot.png /tmp/org/public/snapshots/
+            for f in vini-snapshot studio-snapshot; do
+              cp "snapshots/${f}.png" "/tmp/org/snapshots/"
+              cp "snapshots/${f}.png" "/tmp/org/public/snapshots/"
+              [ -f "snapshots/${f}.json" ] && cp "snapshots/${f}.json" "/tmp/org/snapshots/" && cp "snapshots/${f}.json" "/tmp/org/public/snapshots/" || true
+            done
           fi
           cd /tmp/org
           # Guard: never ship a bloated page (the StripKey regression produced a

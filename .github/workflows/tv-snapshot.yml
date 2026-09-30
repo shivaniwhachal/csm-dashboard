@@ -82,15 +82,20 @@ jobs:
 
       - name: Push snapshots to org aws-prod (optional)
         if: steps.commit.outputs.changed == 'true' && env.ORG_SYNC_TOKEN != ''
+        continue-on-error: true
+        id: org_push
         run: |
           set -euo pipefail
-          git clone --depth 1 "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/spyne-ai-agentic-dev/csm-dashboard.git" /tmp/org
-          # Paths the Express API is expected to read — verify in org ONBOARDING.md /
-          # server static config on aws-prod if deploy doesn't pick up PNGs.
+          if ! git clone --depth 1 "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/spyne-ai-agentic-dev/csm-dashboard.git" /tmp/org; then
+            echo "::warning::Org clone failed — recreate ORG_SYNC_TOKEN with Contents:write on spyne-ai-agentic-dev/csm-dashboard and Authorize SSO for the org."
+            exit 1
+          fi
           for dst in snapshots public/snapshots; do
             mkdir -p "/tmp/org/$dst"
             cp snapshots/vini-snapshot.png "/tmp/org/$dst/vini-snapshot.png"
             cp snapshots/studio-snapshot.png "/tmp/org/$dst/studio-snapshot.png"
+            cp snapshots/vini-snapshot.json "/tmp/org/$dst/vini-snapshot.json"
+            cp snapshots/studio-snapshot.json "/tmp/org/$dst/studio-snapshot.json"
           done
           cd /tmp/org
           if git diff --quiet; then
@@ -107,6 +112,15 @@ jobs:
           if [ "$MAIN" != "$PROD" ]; then
             git push origin "$MAIN":refs/heads/aws-prod
             echo "aws-prod advanced -> ${MAIN} (CodePipeline rebuild)"
+          fi
+
+      - name: Org push summary
+        if: always() && steps.commit.outputs.changed == 'true'
+        run: |
+          if [ "${{ steps.org_push.outcome }}" = "success" ]; then
+            echo "Org aws-prod updated — production PNG should advance after CodePipeline."
+          elif [ -n "${ORG_SYNC_TOKEN}" ]; then
+            echo "::warning::Fork snapshots committed; org push failed. TV jsDelivr fallback still picks up fork within ~5 min. Fix ORG_SYNC_TOKEN + SSO for prod path."
           fi
 
       - name: Warn if org token missing
