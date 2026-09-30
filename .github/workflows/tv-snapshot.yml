@@ -39,6 +39,9 @@ jobs:
           npm install
           npx playwright install --with-deps chromium
 
+      - name: Sync with remote before capture
+        run: git pull --ff-only origin "${{ github.ref_name }}"
+
       - name: Capture TV wall PNGs
         working-directory: email
         run: node capture-wall-snapshots.mjs
@@ -58,9 +61,23 @@ jobs:
           ts=$(date -u +'%Y-%m-%d %H:%M UTC')
           git commit -m "TV wall snapshots ($ts) [skip ci]"
           for attempt in 1 2 3 4 5; do
-            if git push; then echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-            git pull --rebase origin "${{ github.ref_name }}"
+            if git push origin "HEAD:${{ github.ref_name }}"; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — keeping fresh PNGs, resetting to remote, recommitting."
+            git fetch origin "${{ github.ref_name }}"
+            cp snapshots/vini-snapshot.png /tmp/vini-snapshot.png
+            cp snapshots/studio-snapshot.png /tmp/studio-snapshot.png
+            git reset --hard "origin/${{ github.ref_name }}"
+            mkdir -p snapshots
+            cp /tmp/vini-snapshot.png snapshots/vini-snapshot.png
+            cp /tmp/studio-snapshot.png snapshots/studio-snapshot.png
+            git add snapshots/
+            ts=$(date -u +'%Y-%m-%d %H:%M UTC')
+            git commit -m "TV wall snapshots ($ts) [skip ci]"
           done
+          echo "Failed to push snapshot commit after 5 attempts."
           exit 1
 
       - name: Push snapshots to org aws-prod (optional)
