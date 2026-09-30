@@ -22,12 +22,32 @@
     }
   }catch(e){}
 })();
+<script>
+(function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('tv') === '1') document.documentElement.classList.add('tv-mode');
+  } catch (e) {}
+})();
 </script>
 <title>CSM Dashboard — Studio &amp; Vini</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* TV wall mode (?tv=1): chromeless iframe target for CEO office slide 2 */
+  html.tv-mode .top-tabs,
+  html.tv-mode .view-subtabs,
+  html.tv-mode header.page,
+  html.tv-mode .top-meta,
+  html.tv-mode .filter-bar,
+  html.tv-mode .sub-tabs,
+  html.tv-mode .ca-filter-bar,
+  html.tv-mode #freeze { display: none !important; }
+  html.tv-mode body { margin: 0; overflow: hidden; background: var(--bg); }
+  html.tv-mode .container { padding: 0; max-width: none; }
+  html.tv-mode #view-overall.scoped { margin: 0; }
+
   :root {
     --bg:#F7F8FA; --surface:#FFF; --border:#E5E7EB; --border-strong:#D1D5DB;
     --text:#111827; --text-2:#374151; --text-3:#6B7280; --text-4:#9CA3AF;
@@ -3025,7 +3045,9 @@ const SHEET_URLS = {
    The tick now re-fetches the JSON and repaints in place. The BUILD is watched
    separately, on the /health fingerprint, so a new deploy is still picked up —
    just never at the cost of the view somebody is standing in front of. */
-const REFRESH_INTERVAL_MS = 10 * 60 * 1000;      // 10 minutes — data-only cadence
+const REFRESH_INTERVAL_MS = document.documentElement.classList.contains('tv-mode')
+  ? 5 * 60 * 1000                               // TV wall: 5 minutes
+  : 10 * 60 * 1000;                            // 10 minutes — data-only cadence
 
 // Tolerant header lookup for the sheet — accept minor renames.
 const SHEET_FIELD_SYNONYMS = {
@@ -4288,6 +4310,14 @@ let state = {
 // can't be live-fetched client-side. To make that reload seamless, we stash the
 // UI state (active tab, filters, period, drilldown, searches) + scroll position
 // in sessionStorage and restore it here, before the first render.
+
+const TV_URL = (function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    return { tv: q.get('tv') === '1', view: q.get('view') || '' };
+  } catch (e) { return { tv: false, view: '' }; }
+})();
+if (TV_URL.tv) document.documentElement.classList.add('tv-mode');
 const STATE_KEY = 'csm_dash_state_v1';
 let _restoreScrollY = 0;
 (function restoreState(){
@@ -4328,6 +4358,16 @@ let _restoreScrollY = 0;
     _restoreScrollY = Number(saved.scrollY) || 0;
   } catch (e) {}
 })();
+(function applyTvUrlView(){
+  if (TV_URL.view === 'vvini') {
+    state.view = 'vvini';
+    state.viewSub = 'vvini';
+  } else if (TV_URL.view === 'vstudio') {
+    state.view = 'vstudio';
+    state.viewSub = 'vstudio';
+  }
+})();
+
 function persistState(){
   try {
     sessionStorage.setItem(STATE_KEY, JSON.stringify({
@@ -13662,6 +13702,16 @@ function renderAccountBook() {
   }));
 }
 
+
+window.__TV_ENTER_FULLSCREEN__ = function(){
+  if (!document.documentElement.classList.contains('tv-mode')) return;
+  if (state.view !== 'vvini') return;
+  const mount = document.getElementById('v-vvini');
+  if (!mount || document.fullscreenElement === mount) return;
+  const req = mount.requestFullscreen || mount.webkitRequestFullscreen;
+  if (req) req.call(mount).catch(function(){});
+};
+
 window.__REPAINT_SCOPED_VIEW__ = function(){
   const v = state.view;
   if (v !== 'vstudio' && v !== 'vvini') return false;   // nothing scoped on screen
@@ -18831,6 +18881,7 @@ window.__VINI_OB_LIVE__=function refreshViniObLive(){
       VOB.vini.overall = (ovD&&ovD.aggregate)||null;
       if(st&&st.aggregate) VOB.studio=pack('studioAi',st,sd,sr);
       try{ if(typeof render==='function') render(); }catch(e){}
+      try{ if(typeof window.__TV_ENTER_FULLSCREEN__==='function') window.__TV_ENTER_FULLSCREEN__(); }catch(e){}
     });
   }catch(e){}
 };
@@ -19055,6 +19106,9 @@ async function load(opts){
           + (mins ? ' · auto-refresh ' + mins + 'm' : '');
       }
     } catch (e) { /* a header caption must never break a successful load */ }
+    try {
+      if (typeof window.__TV_ENTER_FULLSCREEN__ === 'function') window.__TV_ENTER_FULLSCREEN__();
+    } catch (e) { /* tv fullscreen is best-effort */ }
   }catch(e){ $('#loading').textContent='Failed to load data: '+e.message; console.error(e); }
 }
 /* Published across the script-block boundary. load() lives in this block; the
@@ -25967,6 +26021,11 @@ function exportRedReviews(){
     try { load(); reviewStoreInit(); }
     catch (e) { console.error('[spyne-studio] boot failed:', e); }
   };
+  if (document.documentElement.classList.contains('tv-mode')) {
+    try { window.__SS_BOOT__(); } catch (e) { console.error('[tv-mode] boot failed:', e); }
+    try { if (typeof renderAll === 'function') renderAll(); } catch (e) {}
+  }
+
 })();
 </script>
 <script>
