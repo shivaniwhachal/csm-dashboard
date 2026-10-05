@@ -51,8 +51,17 @@ jobs:
         run: |
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/spyne-ai-agentic-dev/csm-dashboard.git" /tmp/org
-          # The dashboard page (3 byte-identical copies) …
-          # … and every JSON feed the container serves at runtime.
+          # THE PAGE IS NO LONGER COPIED. The org repo's index.html is the source
+          # of truth for the dashboard and this fork's copy is older — copying it
+          # here replaced the live page every 4 hours, deleting whatever had been
+          # built in the org since this fork last synced (the Account Book, the
+          # multi-select filters, the churn charts) and, in the other direction,
+          # losing this fork's TV wall work when the org restored its own copy.
+          # Two people were overwriting each other twice a day without either
+          # seeing it.
+          # Only DATA is copied now. If this fork ever needs to change the page,
+          # pull the org's current index.html first and open a PR there.
+          # JSON feeds the container serves at runtime:
           for f in churn_data.json cohort_data.json payment_data.json comm_metabase.json \
                    vini_card.json vini_report_tracking.json studio_card.json rooftop_adoption.json; do
             [ -f "$f" ] && cp "$f" "/tmp/org/$f" && cp "$f" "/tmp/org/vercel_deploy/$f" || true
