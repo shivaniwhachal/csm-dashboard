@@ -52,9 +52,9 @@ jobs:
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${ORG_SYNC_TOKEN}@github.com/spyne-ai-agentic-dev/csm-dashboard.git" /tmp/org
           # The dashboard page (3 byte-identical copies) …
-          cp index.html /tmp/org/index.html
-          cp index.html /tmp/org/vercel_deploy/index.html
-          cp index.html /tmp/org/CSM_Dashboard.html
+#Org repo index.html is the source of truth — never copy HTML from this fork
+# into spyne-ai-agentic-dev/csm-dashboard. JSON feeds only.
+# Copy every JSON feed the container serves at runtime.
           # … and every JSON feed the container serves at runtime.
           for f in churn_data.json cohort_data.json payment_data.json comm_metabase.json \
                    vini_card.json vini_report_tracking.json studio_card.json rooftop_adoption.json; do
